@@ -42,17 +42,67 @@ public class TypeSetTests
         configuration.FirstBinPath.Types.Add( typeof( WithAlso ) );
         var party = new TypeSetConfiguration( "$Party" );
         party.ExcludedTypes.Add( typeof( OtherObject ) );
-        party.ExcludedTypes.Add( typeof( AlsoRegistered ) );
         configuration.FirstBinPath.AddTypeSet( party );
 
         var result = BinPathTypeGroup.Run( TestHelper.Monitor, configuration ).ShouldNotBeNull();
         result.Success.ShouldBeTrue();
         var g = result.Groups.ShouldHaveSingleItem();
         g.ConfiguredTypes.AllTypes.Select( cT => cT.Type ).ShouldBe( [typeof( RootObject ), typeof( OtherObject ), typeof( WithAlso ), typeof( AlsoRegistered )], ignoreOrder: true );
-        // AlsoRegistered is excluded, but [AlsoRegisterType] ignores the exclusions (as for the BinPath).
         g.TypeSets["$party"].Select( cT => cT.Type ).ShouldBe( [typeof( RootObject ), typeof( WithAlso ), typeof( AlsoRegistered )], ignoreOrder: true );
     }
 
+    [Test]
+    public void an_AlsoRegisterType_cannot_bring_back_an_excluded_type()
+    {
+        var configuration = new EngineConfiguration();
+        configuration.FirstBinPath.Types.Add( typeof( RootObject ) );
+        configuration.FirstBinPath.Types.Add( typeof( WithAlso ) );
+        var party = new TypeSetConfiguration( "$Party" );
+        party.ExcludedTypes.Add( typeof( AlsoRegistered ) );
+        configuration.FirstBinPath.AddTypeSet( party );
+        using( TestHelper.Monitor.CollectTexts( out var texts ) )
+        {
+            BinPathTypeGroup.Run( TestHelper.Monitor, configuration ).ShouldNotBeNull().Success.ShouldBeFalse();
+            texts.ShouldContain( t => t.Contains( "is excluded from TypeSet '$Party' (by" ) && t.Contains( "requires it." ) );
+        }
+        // Excluding the type that requires it too resolves the conflict.
+        party.ExcludedTypes.Add( typeof( WithAlso ) );
+        var g = BinPathTypeGroup.Run( TestHelper.Monitor, configuration ).ShouldNotBeNull().Groups.ShouldHaveSingleItem();
+        g.TypeSets["$Party"].Select( cT => cT.Type ).ShouldBe( [typeof( RootObject )] );
+
+        // The same at the BinPath level.
+        configuration = new EngineConfiguration();
+        configuration.FirstBinPath.Types.Add( typeof( WithAlso ) );
+        configuration.FirstBinPath.ExcludedTypes.Add( typeof( AlsoRegistered ) );
+        using( TestHelper.Monitor.CollectTexts( out var texts ) )
+        {
+            BinPathTypeGroup.Run( TestHelper.Monitor, configuration ).ShouldNotBeNull().Success.ShouldBeFalse();
+            texts.ShouldContain( t => t.Contains( "is excluded from BinPath" ) && t.Contains( "requires it." ) );
+        }
+    }
+
+    public interface IRepository<T> { }
+    public class UserRepository : IRepository<string>, IRealObject { }
+    public class SpecializedObject : RootObject { }
+
+    [Test]
+    public void an_exclusion_excludes_everything_that_is_the_excluded_type()
+    {
+        var configuration = new EngineConfiguration();
+        configuration.FirstBinPath.Types.Add( typeof( SpecializedObject ) );
+        configuration.FirstBinPath.Types.Add( typeof( OtherObject ) );
+        configuration.FirstBinPath.Types.Add( typeof( UserRepository ) );
+        var party = new TypeSetConfiguration( "$Party" );
+        party.ExcludedTypes.Add( typeof( RootObject ) );
+        configuration.FirstBinPath.AddTypeSet( party );
+        var g = BinPathTypeGroup.Run( TestHelper.Monitor, configuration ).ShouldNotBeNull().Groups.ShouldHaveSingleItem();
+        g.TypeSets["$Party"].Select( cT => cT.Type ).ShouldBe( [typeof( OtherObject ), typeof( UserRepository )], ignoreOrder: true );
+
+        // At the BinPath level, with a generic type definition.
+        configuration.FirstBinPath.ExcludedTypes.Add( typeof( IRepository<> ) );
+        g = BinPathTypeGroup.Run( TestHelper.Monitor, configuration ).ShouldNotBeNull().Groups.ShouldHaveSingleItem();
+        g.ConfiguredTypes.AllTypes.Select( cT => cT.Type ).ShouldBe( [typeof( SpecializedObject ), typeof( OtherObject )], ignoreOrder: true );
+    }
     [Test]
     public void the_types_of_a_set_are_added_to_the_BinPath()
     {
@@ -84,7 +134,7 @@ public class TypeSetTests
         using( TestHelper.Monitor.CollectTexts( out var texts ) )
         {
             BinPathTypeGroup.Run( TestHelper.Monitor, configuration ).ShouldBeNull();
-            texts.ShouldContain( t => t.Contains( "adds the type" ) && t.Contains( "that the BinPath excludes: the exclusions apply downward." ) );
+            texts.ShouldContain( t => t.Contains( "adds the type" ) && t.Contains( "that the BinPath excludes (by" ) );
         }
     }
 

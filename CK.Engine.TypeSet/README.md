@@ -14,10 +14,11 @@ error), runs the `AssemblyCache`, then builds the groups. Its `BinPathTypeGroup.
 
 For each BinPath, the types of its assemblies are completed by its configuration, in this order:
 
-1. its `BinPathConfiguration.ExcludedTypes` are removed;
+1. its `BinPathConfiguration.ExcludedTypes` are removed, with everything that is one of them (see [Exclusion](#exclusion));
 2. its `BinPathConfiguration.Types` are added (with their configured kind);
 3. the `Types` of its named type sets are added: the inclusion in a set is an inclusion in the BinPath;
-4. the `[AlsoRegisterType]` closure of the selection is added: it is the last step and ignores any exclusion.
+4. the `[AlsoRegisterType]` closure of the selection is added: it is the last step, and it cannot bring back an
+   excluded type (an error).
 
 The BinPaths that share the same assemblies and the same type configuration form one group: `BinPathTypeGroup.Configurations`
 lists them, `BinPathTypeGroup.ConfiguredTypes` holds their types and `BinPathTypeGroup.Signature` identifies them.
@@ -39,7 +40,8 @@ or the group), parents first:
   propagate upward: a package that a client roots is in its party). A set that has no own roots also has the non
   optional packages of its candidates (an `IOptionalResourceGroupAttribute` makes a package optional).
 - **Its other types** are the ones of its parent minus its `ExcludedTypes`.
-- The `[AlsoRegisterType]` closure of its members applies last (it ignores any exclusion).
+- The `[AlsoRegisterType]` closure of its members applies last: it cannot bring back a type excluded by the set, one
+  of its ancestors or the BinPath (an error).
 
 A root that is excluded from the set (or not in its parent), a required package that is not a candidate, an ambiguous
 single abstraction are errors. The sets are part of the group's signature.
@@ -56,3 +58,25 @@ an alias of a type.
   optionality.
 - A feature name on a type that is not a package (except an abstract class), a name that no package bears, an invalid
   name are errors.
+
+## Exclusion
+
+An exclusion follows the **Liskov substitution principle**: an instance of a specialization is an instance of its base,
+so excluding a type excludes everything that **is** this type: the type itself, its specializations, the
+implementations and the extensions of an interface. A generic type definition excludes all its constructed types and
+what is one of them (`IRepository<>` excludes `IRepository<User>` and its implementations). `TypeExclusion`
+(CK.Engine.Configuration) implements it, for the BinPath (`ExcludedTypes`, `GlobalExcludedTypes`) and the named sets.
+
+So no member is assignable to an excluded type, and the base types of a member need no rule of their own: an
+exclusion never "hides" a base from the types that specialize it. Some consequences:
+
+| Excluded | Result |
+|----------|--------|
+| a base class | every class that derives from it |
+| a specialization of a concrete class | the specialization only (its base becomes the final one again) |
+| a service interface | all its implementations |
+| a primary `IPoco` | the whole family (the secondary interfaces extend it) |
+| a secondary `IPoco` | this facet and its extensions, not the primary one |
+
+A requirement on an excluded type is an error, never a silent re-inclusion: an `[AlsoRegisterType]` of a member, a
+required package of the closure, a type that a set adds while an ancestor excludes it.

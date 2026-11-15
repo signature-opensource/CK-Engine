@@ -36,22 +36,17 @@ public sealed partial class BinPathTypeGroup
         var features = CollectFeatureNames( monitor, groupTypes );
         if( features == null ) return null;
         bool success = true;
-        // The own roots and the exclusions of each set.
+        // The own roots and the excluded types of each set (an excluded type excludes everything that is it: see TypeExclusion).
         var ownRoots = new Dictionary<TypeSetConfiguration, HashSet<ICachedType>>();
-        var excluded = new Dictionary<TypeSetConfiguration, HashSet<ICachedType>>();
+        var excluded = new Dictionary<TypeSetConfiguration, List<Type>>();
         foreach( var s in c.TypeSets )
         {
             var roots = new HashSet<ICachedType>( s.Types.Select( typeCache.Get ).Where( IsPackage ) );
-            var ex = new HashSet<ICachedType>();
-            foreach( var t in s.ExcludedTypes )
-            {
-                var cT = typeCache.Find( t );
-                if( cT != null ) ex.Add( cT );
-            }
+            var excludedPackages = new HashSet<ICachedType>();
             success &= ResolveFeatures( monitor, s, s.Features, features, roots );
-            success &= ResolveFeatures( monitor, s, s.ExcludedFeatures, features, ex );
+            success &= ResolveFeatures( monitor, s, s.ExcludedFeatures, features, excludedPackages );
             ownRoots.Add( s, roots );
-            excluded.Add( s, ex );
+            excluded.Add( s, [.. s.ExcludedTypes, .. excludedPackages.Select( p => p.Type )] );
         }
         if( !success ) return null;
         // The roots propagate upward.
@@ -77,7 +72,7 @@ public sealed partial class BinPathTypeGroup
             IReadOnlySet<ICachedType>? parentMembers = parent == null ? groupTypes : Compute( parent );
             if( parentMembers == null ) return null;
             var ex = excluded[s];
-            var candidates = parentMembers.Where( t => IsPackage( t ) && !ex.Contains( t ) ).ToHashSet();
+            var candidates = parentMembers.Where( t => IsPackage( t ) && ex.FindExcluder( t.Type ) == null ).ToHashSet();
             var roots = allRoots[s];
             bool rootsOk = true;
             foreach( var r in roots.Where( r => !candidates.Contains( r ) ).OrderBy( r => r.CSharpName ) )
@@ -105,10 +100,40 @@ public sealed partial class BinPathTypeGroup
                 monitor.Error( $"Unable to compute the packages of {s}." );
                 return null;
             }
-            var members = new HashSet<ICachedType>( parentMembers.Where( t => !IsPackage( t ) && !ex.Contains( t ) ) );
+            var members = new HashSet<ICachedType>( parentMembers.Where( t => !IsPackage( t ) && ex.FindExcluder( t.Type ) == null ) );
             members.UnionWith( closure );
+            // The [AlsoRegisterType] cannot bring back a type excluded by this set, its ancestors or the BinPath.
             var alsoTypes = members.GetRegisterAlsoTypesClosure();
-            if( alsoTypes != null ) members.AddRange( alsoTypes.Keys );
+            if( alsoTypes != null )
+            {
+                bool alsoOk = true;
+                foreach( var (also, source) in alsoTypes )
+                {
+                    if( members.Contains( also ) ) continue;
+                    Type? excluder = null;
+                    TypeSetConfiguration? by = null;
+                    for( var e = s; e != null && excluder == null; e = FindParent( c, e ) )
+                    {
+                        excluder = excluded[e].FindExcluder( also.Type );
+                        by = e;
+                    }
+                    if( excluder == null && c.ExcludedTypes.FindExcluder( also.Type ) is Type b )
+                    {
+                        excluder = b;
+                        by = null;
+                    }
+                    if( excluder != null )
+                    {
+                        monitor.Error( $"Type '{also}' is excluded from {s} (by '{excluder:N}' of {(object?)by ?? $"BinPath '{c.Name}'"}) but [AlsoRegisterType<{also.Name}>] on '{source}' requires it." );
+                        alsoOk = false;
+                    }
+                    else
+                    {
+                        members.Add( also );
+                    }
+                }
+                if( !alsoOk ) return null;
+            }
             monitor.Info( $"{s}: {members.Count} of the {parentMembers.Count} types of its parent, {closure.Count} of its {candidates.Count} candidate packages." );
             result.Add( s.Name, members );
             return members;

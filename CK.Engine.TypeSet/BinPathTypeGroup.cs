@@ -195,25 +195,19 @@ public sealed partial class BinPathTypeGroup
             hasher.AppendData( assemblyGroup.Signature.GetBytes().Span );
 
             // Applying Types and ExcludedTypes configurations to the types provided by the assemblies.
-            Throw.DebugAssert( "Configuration normalization did the job.", c.Types.Any( tc => c.ExcludedTypes.Contains( tc.Type ) ) is false ); 
+            Throw.DebugAssert( "Configuration normalization did the job.", c.Types.Any( tc => c.ExcludedTypes.FindExcluder( tc.Type ) != null ) is false );
 
-            // Must unfortunately order the sets.
-            var excludedByConfiguration = c.ExcludedTypes.Select( assemblyResult.TypeCache.Find )
-                                                         .Where( cT => cT != null )
-                                                         .OrderBy( cT => cT!.CSharpName );
-            foreach( var cT in excludedByConfiguration )
+            // An excluded type excludes everything that is it (see TypeExclusion). For the hash, always consider the
+            // configured type even if it is not used (must unfortunately order the set).
+            foreach( var name in c.ExcludedTypes.Select( t => t.ToCSharpName() ).Order( StringComparer.Ordinal ) )
             {
-                Throw.DebugAssert( cT != null );
-                var msg = AssemblyCache.BinPathGroup.GetConfiguredTypeErrorMessage( typeCache, cT, ConfigurableAutoServiceKind.None );
-                if( msg != null )
-                {
-                    monitor.Warn( $"Ignoring ExcludedType configuration: '{cT.CSharpName}' {msg}." );
-                }
-                else
+                hasher.Append( name );
+            }
+            if( c.ExcludedTypes.Count > 0 )
+            {
+                foreach( var cT in types.AllTypes.Where( t => c.ExcludedTypes.FindExcluder( t.Type ) != null ).ToList() )
                 {
                     types.Remove( cT );
-                    // For the hash, always consider the configured type even it is not used.
-                    hasher.Append( cT.CSharpName );
                 }
             }
             var includedByConfiguration = c.Types.Select( tc => (Type: assemblyResult.TypeCache.Get( tc.Type ), tc.Kind) )
@@ -251,14 +245,21 @@ public sealed partial class BinPathTypeGroup
                 }
             }
             // The set of types is ready. We finally extend the set with the [AlsoRegisterType] of the
-            // selected types: AlsoRegisterType is the last step that must be applied to any type selection,
-            // it ignores any potential exclusion.
+            // selected types: AlsoRegisterType is the last step that must be applied to any type selection.
+            // It cannot bring back an excluded type: this is an error.
             Dictionary<ICachedType, ICachedType>? alsoTypes = types.AllTypes.GetRegisterAlsoTypesClosure();
             if( alsoTypes != null )
             {
                 foreach( var (also,source) in alsoTypes )
                 {
-                    if( !types.AllTypes.Contains( also ) )
+                    if( types.AllTypes.Contains( also ) ) continue;
+                    var excluder = c.ExcludedTypes.FindExcluder( also.Type );
+                    if( excluder != null )
+                    {
+                        monitor.Error( $"Type '{also}' is excluded from BinPath '{c.Name}' (by '{excluder:N}') but [AlsoRegisterType<{also.Name}>] on '{source}' requires it." );
+                        success = false;
+                    }
+                    else
                     {
                         types.Add( also );
                         monitor.Debug( $"Type '{also}' will be considered because of [AlsoRegisterType<{also.Name}>] on '{source}'." );
