@@ -44,7 +44,9 @@ or the group), parents first:
   of its ancestors or the BinPath (an error).
 
 A root that is excluded from the set (or not in its parent), a required package that is not a candidate, an ambiguous
-single abstraction are errors. The sets are part of the group's signature.
+single abstraction are errors. A single abstraction (`[IsSingle]`) is unique in a scope: a set that has sets below it
+(a party and its clients) can contain several implementations of it (one per client), the uniqueness is checked in
+each set below it. The sets are part of the group's signature.
 
 ### Feature names
 
