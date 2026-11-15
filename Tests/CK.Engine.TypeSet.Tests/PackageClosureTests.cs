@@ -133,6 +133,43 @@ public class PackageClosureTests
         Run( Create( party, client ), "$Party" ).ShouldBe( ["Feature1", "OptPkg", "Req", "Service"] );
     }
 
+    [AttributeUsage( AttributeTargets.Interface )]
+    public sealed class SingleScopeAttribute : Attribute, ISingleMappingAttribute { }
+
+    [SingleScope]
+    public interface IBuild : IResourceGroup { }
+
+    public sealed class NgBuild : IBuild { }
+
+    public sealed class ViteBuild : IBuild { }
+
+    [Requires<IBuild>]
+    public sealed class Hosting : IResourceGroup { }
+
+    [Test]
+    public void a_single_abstraction_is_unique_in_each_client_not_in_their_party()
+    {
+        Type[] types = [typeof( NgBuild ), typeof( ViteBuild ), typeof( Hosting )];
+        var party = new TypeSetConfiguration( "$Party" );
+        var ng = new TypeSetConfiguration( "Ng" ) { Parent = "$Party" };
+        ng.Types.Add( typeof( NgBuild ) );
+        ng.Types.Add( typeof( Hosting ) );
+        var vite = new TypeSetConfiguration( "Vite" ) { Parent = "$Party" };
+        vite.Types.Add( typeof( ViteBuild ) );
+        vite.Types.Add( typeof( Hosting ) );
+        var c = Create( types, party, ng, vite );
+        Run( c, "$Party" ).ShouldBe( ["Hosting", "NgBuild", "ViteBuild"] );
+        Run( c, "Ng" ).ShouldBe( ["Hosting", "NgBuild"] );
+        Run( c, "Vite" ).ShouldBe( ["Hosting", "ViteBuild"] );
+
+        // In one client, it is unique.
+        var both = new TypeSetConfiguration( "Both" ) { Parent = "$Party" };
+        both.Types.Add( typeof( NgBuild ) );
+        both.Types.Add( typeof( ViteBuild ) );
+        both.Types.Add( typeof( Hosting ) );
+        RunFails( Create( types, party, ng, vite, both ), "Ambiguous single abstraction" );
+    }
+
     [Test]
     public void a_set_is_computed_inside_its_parent()
     {

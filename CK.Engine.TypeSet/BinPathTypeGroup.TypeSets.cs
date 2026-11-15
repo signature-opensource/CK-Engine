@@ -88,11 +88,15 @@ public sealed partial class BinPathTypeGroup
             HashSet<ICachedType>? closure;
             using( monitor.OpenTrace( $"Computing the packages of {s} from {roots.Count} roots among {candidates.Count} candidates." ) )
             {
+                // A set that has sets below it covers several scopes (a party and its clients): the uniqueness of a single
+                // abstraction is checked in each set below it.
+                bool hasChildren = c.TypeSets.Any( child => child.Parent != null && StringComparer.OrdinalIgnoreCase.Equals( child.Parent, s.Name ) );
                 closure = ResPackageClosure.Compute( monitor,
                                                      typeCache,
                                                      candidates,
                                                      roots.Contains,
-                                                     t => typeof( IResourceGroup ).IsAssignableFrom( t.Type ) );
+                                                     t => typeof( IResourceGroup ).IsAssignableFrom( t.Type ),
+                                                     checkSingleUniqueness: !hasChildren );
             }
             if( closure == null )
             {
