@@ -169,16 +169,22 @@ public sealed partial class BinPathTypeGroup
     // A package is a concrete IResourceGroup.
     static bool IsPackage( ICachedType t ) => t.Type.IsClass && !t.Type.IsAbstract && typeof( IResourceGroup ).IsAssignableFrom( t.Type );
 
-    // As the ResSpace: optional when all its IOptionalResourceGroupAttribute say so.
+    // Optional when all the IOptionalResourceGroupAttribute of the closest class (in the base classes) that declares one
+    // say so: an abstract base class can make its specializations optional (a feature driver), a specialization can say
+    // it is not.
     static bool IsOptional( ICachedType t )
     {
-        bool any = false;
-        foreach( var a in t.RawAttributes.OfType<IOptionalResourceGroupAttribute>() )
+        for( var b = t; b != null; b = b.BaseType )
         {
-            if( !a.IsOptional ) return false;
-            any = true;
+            bool any = false;
+            foreach( var a in b.RawAttributes.OfType<IOptionalResourceGroupAttribute>() )
+            {
+                if( !a.IsOptional ) return false;
+                any = true;
+            }
+            if( any ) return true;
         }
-        return any;
+        return false;
     }
 
     // The feature names of the packages (see INamedFeatureAttribute): null on error.

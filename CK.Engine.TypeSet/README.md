@@ -38,7 +38,9 @@ or the group), parents first:
   the required relations, forward only; a reference to a type that is not an `IResourceGroup` is ignored).
 - **Its roots** are the packages of its `Types` and of its `Features`, plus the roots of the sets below it (they
   propagate upward: a package that a client roots is in its party). A set that has no own roots also has the non
-  optional packages of its candidates (an `IOptionalResourceGroupAttribute` makes a package optional).
+  optional packages of its candidates. A package is optional when the `IOptionalResourceGroupAttribute` of the
+  closest class (in its base classes) that declares one all say so: an abstract base can make its specializations
+  optional, a specialization can say it is not.
 - **Its other types** are the ones of its parent minus its `ExcludedTypes`.
 - The `[AlsoRegisterType]` closure of its members applies last: it cannot bring back a type excluded by the set, one
   of its ancestors or the BinPath (an error).

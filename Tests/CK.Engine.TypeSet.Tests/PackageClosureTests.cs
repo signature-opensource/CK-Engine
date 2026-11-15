@@ -30,6 +30,17 @@ public sealed class TestOptionalAttribute : Attribute, IOptionalResourceGroupAtt
 [TestFeature( TypeNameSuffix = "Driver" )]
 public abstract class TestDriver : IResourceGroup { }
 
+[AttributeUsage( AttributeTargets.Class, Inherited = false )]
+public sealed class TestOptionalityAttribute : Attribute, IOptionalResourceGroupAttribute
+{
+    public TestOptionalityAttribute( bool isOptional ) => IsOptional = isOptional;
+
+    public bool IsOptional { get; }
+}
+
+[TestOptionality( true )]
+public abstract class OptionalBase : IResourceGroup { }
+
 [TestFixture]
 public class PackageClosureTests
 {
@@ -107,6 +118,18 @@ public class PackageClosureTests
         g.FeatureNames.Keys.Order().ShouldBe( ["Http", "One", "Side"] );
         g.FeatureNames["side"].Select( t => t.Type.Name ).Order().ShouldBe( ["Side1", "Side2"] );
         g.FeatureNames["One"].ShouldHaveSingleItem().Type.ShouldBe( typeof( Feature1 ) );
+    }
+
+    public sealed class OptionalByBase : OptionalBase { }
+
+    [TestOptionality( false )]
+    public sealed class NotOptional : OptionalBase { }
+
+    [Test]
+    public void the_optionality_is_the_closest_declaration_in_the_base_classes()
+    {
+        Type[] types = [typeof( OptionalByBase ), typeof( NotOptional )];
+        Run( Create( types, new TypeSetConfiguration( "$Party" ) ), "$Party" ).ShouldBe( ["NotOptional"] );
     }
 
     [Test]
