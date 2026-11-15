@@ -101,6 +101,15 @@ public class PackageClosureTests
     }
 
     [Test]
+    public void the_feature_names_are_exposed_by_the_group_even_without_sets()
+    {
+        var g = BinPathTypeGroup.Run( TestHelper.Monitor, Create() ).ShouldNotBeNull().Groups.ShouldHaveSingleItem();
+        g.FeatureNames.Keys.Order().ShouldBe( ["Http", "One", "Side"] );
+        g.FeatureNames["side"].Select( t => t.Type.Name ).Order().ShouldBe( ["Side1", "Side2"] );
+        g.FeatureNames["One"].ShouldHaveSingleItem().Type.ShouldBe( typeof( Feature1 ) );
+    }
+
+    [Test]
     public void the_roots_by_type()
     {
         var party = new TypeSetConfiguration( "$Party" );

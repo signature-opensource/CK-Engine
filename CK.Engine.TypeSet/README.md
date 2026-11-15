@@ -59,6 +59,9 @@ an alias of a type.
 - A feature name on a type that is not a package (except an abstract class), a name that no package bears, an invalid
   name are errors.
 
+`BinPathTypeGroup.FeatureNames` exposes the names of a group and the packages that each one activates: what a
+configuration tool can offer to choose from.
+
 ## Exclusion
 
 An exclusion follows the **Liskov substitution principle**: an instance of a specialization is an instance of its base,

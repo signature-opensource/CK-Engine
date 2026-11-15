@@ -21,6 +21,7 @@ public sealed partial class BinPathTypeGroup
                                                                                    GlobalTypeCache typeCache,
                                                                                    BinPathConfiguration c,
                                                                                    IReadOnlySet<ICachedType> groupTypes,
+                                                                                   Dictionary<string, List<ICachedType>> features,
                                                                                    IncrementalHash hasher )
     {
         if( c.TypeSets.Count == 0 ) return ImmutableDictionary<string, IReadOnlySet<ICachedType>>.Empty;
@@ -33,8 +34,6 @@ public sealed partial class BinPathTypeGroup
             foreach( var f in s.ExcludedFeatures.Select( f => f.ToLowerInvariant() ).Order( StringComparer.Ordinal ) ) hasher.Append( "-F:" ).Append( f );
             foreach( var f in s.Features.Select( f => f.ToLowerInvariant() ).Order( StringComparer.Ordinal ) ) hasher.Append( "+F:" ).Append( f );
         }
-        var features = CollectFeatureNames( monitor, groupTypes );
-        if( features == null ) return null;
         bool success = true;
         // The own roots and the excluded types of each set (an excluded type excludes everything that is it: see TypeExclusion).
         var ownRoots = new Dictionary<TypeSetConfiguration, HashSet<ICachedType>>();
