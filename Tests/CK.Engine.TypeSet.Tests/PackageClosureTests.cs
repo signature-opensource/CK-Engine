@@ -147,7 +147,7 @@ public class PackageClosureTests
     public sealed class Hosting : IResourceGroup { }
 
     [Test]
-    public void a_single_abstraction_is_unique_in_each_client_not_in_their_party()
+    public void a_set_holds_membership_only_the_uniqueness_is_checked_by_the_engine_of_the_model()
     {
         Type[] types = [typeof( NgBuild ), typeof( ViteBuild ), typeof( Hosting )];
         var party = new TypeSetConfiguration( "$Party" );
@@ -162,12 +162,17 @@ public class PackageClosureTests
         Run( c, "Ng" ).ShouldBe( ["Hosting", "NgBuild"] );
         Run( c, "Vite" ).ShouldBe( ["Hosting", "ViteBuild"] );
 
-        // In one client, it is unique.
+        // A client with both is a membership: its uniqueness is not checked here.
         var both = new TypeSetConfiguration( "Both" ) { Parent = "$Party" };
         both.Types.Add( typeof( NgBuild ) );
         both.Types.Add( typeof( ViteBuild ) );
         both.Types.Add( typeof( Hosting ) );
-        RunFails( Create( types, party, ng, vite, both ), "Ambiguous single abstraction" );
+        Run( Create( types, party, ng, vite, both ), "Both" ).ShouldBe( ["Hosting", "NgBuild", "ViteBuild"] );
+
+        // But a requirement that has more than one candidate and no root is ambiguous: the membership can't be decided.
+        var hostOnly = new TypeSetConfiguration( "HostOnly" ) { Parent = "$Party" };
+        hostOnly.Types.Add( typeof( Hosting ) );
+        RunFails( Create( types, party, ng, vite, hostOnly ), "Ambiguous single abstraction" );
     }
 
     [Test]

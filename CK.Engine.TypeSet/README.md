@@ -43,10 +43,12 @@ or the group), parents first:
 - The `[AlsoRegisterType]` closure of its members applies last: it cannot bring back a type excluded by the set, one
   of its ancestors or the BinPath (an error).
 
-A root that is excluded from the set (or not in its parent), a required package that is not a candidate, an ambiguous
-single abstraction are errors. A single abstraction (`[IsSingle]`) is unique in a scope: a set that has sets below it
-(a party and its clients) can contain several implementations of it (one per client), the uniqueness is checked in
-each set below it. The sets are part of the group's signature.
+A root that is excluded from the set (or not in its parent), a required package that is not a candidate are errors.
+
+**A set holds membership only.** A required single abstraction (`[IsSingle]`) keeps its root implementations, or its
+only candidate (more than one candidate and no root is an ambiguity: an error). Its uniqueness is not checked here:
+the scopes in which an abstraction is unique (a client, a party) are known by the engine of the model that defines
+them, which checks them (`ResPackageClosure` receives this decision as a predicate). The sets are part of the group's signature.
 
 ### Feature names
 
