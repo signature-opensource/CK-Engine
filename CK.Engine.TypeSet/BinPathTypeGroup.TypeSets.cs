@@ -40,7 +40,7 @@ public sealed partial class BinPathTypeGroup
         var excluded = new Dictionary<TypeSetConfiguration, List<Type>>();
         foreach( var s in c.TypeSets )
         {
-            var roots = new HashSet<ICachedType>( s.Types.Select( typeCache.Get ).Where( IsPackage ) );
+            var roots = new HashSet<ICachedType>( s.Types.Select( typeCache.Get ).Where( FeaturePackages.IsPackage ) );
             var excludedPackages = new HashSet<ICachedType>();
             success &= ResolveFeatures( monitor, s, s.Features, features, roots );
             success &= ResolveFeatures( monitor, s, s.ExcludedFeatures, features, excludedPackages );
@@ -71,7 +71,7 @@ public sealed partial class BinPathTypeGroup
             IReadOnlySet<ICachedType>? parentMembers = parent == null ? groupTypes : Compute( parent );
             if( parentMembers == null ) return null;
             var ex = excluded[s];
-            var candidates = parentMembers.Where( t => IsPackage( t ) && ex.FindExcluder( t.Type ) == null ).ToHashSet();
+            var candidates = parentMembers.Where( t => FeaturePackages.IsPackage( t ) && ex.FindExcluder( t.Type ) == null ).ToHashSet();
             var roots = allRoots[s];
             bool rootsOk = true;
             foreach( var r in roots.Where( r => !candidates.Contains( r ) ).OrderBy( r => r.CSharpName ) )
@@ -83,7 +83,7 @@ public sealed partial class BinPathTypeGroup
             if( ownRoots[s].Count == 0 )
             {
                 roots = new HashSet<ICachedType>( roots );
-                roots.UnionWith( candidates.Where( t => !IsOptional( t ) ) );
+                roots.UnionWith( candidates.Where( t => !FeaturePackages.IsOptional( t ) ) );
             }
             HashSet<ICachedType>? closure;
             using( monitor.OpenTrace( $"Computing the packages of {s} from {roots.Count} roots among {candidates.Count} candidates." ) )
@@ -102,7 +102,7 @@ public sealed partial class BinPathTypeGroup
                 monitor.Error( $"Unable to compute the packages of {s}." );
                 return null;
             }
-            var members = new HashSet<ICachedType>( parentMembers.Where( t => !IsPackage( t ) && ex.FindExcluder( t.Type ) == null ) );
+            var members = new HashSet<ICachedType>( parentMembers.Where( t => !FeaturePackages.IsPackage( t ) && ex.FindExcluder( t.Type ) == null ) );
             members.UnionWith( closure );
             // The [AlsoRegisterType] cannot bring back a type excluded by this set, its ancestors or the BinPath.
             var alsoTypes = members.GetRegisterAlsoTypesClosure();
@@ -164,124 +164,5 @@ public sealed partial class BinPathTypeGroup
             }
         }
         return success;
-    }
-
-    // A package is a concrete IResourceGroup.
-    static bool IsPackage( ICachedType t ) => t.Type.IsClass && !t.Type.IsAbstract && typeof( IResourceGroup ).IsAssignableFrom( t.Type );
-
-    // Optional when all the IOptionalResourceGroupAttribute of the closest class (in the base classes) that declares one
-    // say so: an abstract base class can make its specializations optional (a feature driver), a specialization can say
-    // it is not.
-    static bool IsOptional( ICachedType t )
-    {
-        for( var b = t; b != null; b = b.BaseType )
-        {
-            bool any = false;
-            foreach( var a in b.RawAttributes.OfType<IOptionalResourceGroupAttribute>() )
-            {
-                if( !a.IsOptional ) return false;
-                any = true;
-            }
-            if( any ) return true;
-        }
-        return false;
-    }
-
-    // The feature names of the packages (see INamedFeatureAttribute): null on error.
-    static Dictionary<string, List<ICachedType>>? CollectFeatureNames( IActivityMonitor monitor, IReadOnlySet<ICachedType> types )
-    {
-        bool success = true;
-        var names = new Dictionary<string, List<ICachedType>>( StringComparer.OrdinalIgnoreCase );
-        var multiple = new Dictionary<ICachedType, bool>();
-        foreach( var t in types )
-        {
-            if( !IsPackage( t ) )
-            {
-                // An abstract class can name its specializations (with a TypeNameSuffix).
-                if( !(t.Type.IsClass && t.Type.IsAbstract) && t.RawAttributes.OfType<INamedFeatureAttribute>().Any() )
-                {
-                    monitor.Error( $"Type '{t.CSharpName}' has a feature name but it is not a package (a concrete IResourceGroup)." );
-                    success = false;
-                }
-                continue;
-            }
-            // The closest declaration in the base classes.
-            INamedFeatureAttribute? attr = null;
-            for( var b = t; b != null; b = b.BaseType )
-            {
-                var declared = b.RawAttributes.OfType<INamedFeatureAttribute>().ToList();
-                if( declared.Count > 1 )
-                {
-                    monitor.Error( $"Type '{b.CSharpName}' has {declared.Count} feature names: a package has at most one." );
-                    success = false;
-                }
-                if( declared.Count > 0 )
-                {
-                    attr = declared[0];
-                    break;
-                }
-            }
-            if( attr == null ) continue;
-            var name = GetFeatureName( monitor, t, attr );
-            if( name == null )
-            {
-                success = false;
-                continue;
-            }
-            if( !names.TryGetValue( name, out var packages ) )
-            {
-                packages = new List<ICachedType>();
-                names.Add( name, packages );
-            }
-            packages.Add( t );
-            multiple.Add( t, attr.IsMultiple );
-        }
-        foreach( var (name, packages) in names )
-        {
-            if( packages.Count == 1 ) continue;
-            var list = packages.Select( p => p.CSharpName ).Order().Concatenate( "', '" );
-            if( !packages.All( p => multiple[p] ) )
-            {
-                monitor.Error( $"The feature name '{name}' is borne by '{list}': a name can be borne by more than one package only when all of them are IsMultiple." );
-                success = false;
-            }
-            else if( packages.Select( IsOptional ).Distinct().Count() > 1 )
-            {
-                monitor.Error( $"The packages of the feature name '{name}' ('{list}') must agree on their optionality." );
-                success = false;
-            }
-        }
-        return success ? names : null;
-    }
-
-    static string? GetFeatureName( IActivityMonitor monitor, ICachedType t, INamedFeatureAttribute attr )
-    {
-        if( (attr.Name == null) == (attr.TypeNameSuffix == null) )
-        {
-            monitor.Error( $"The feature name of '{t.CSharpName}' must have a Name or a TypeNameSuffix (and not both)." );
-            return null;
-        }
-        string name;
-        if( attr.Name != null )
-        {
-            name = attr.Name;
-        }
-        else
-        {
-            var suffix = attr.TypeNameSuffix!;
-            var typeName = t.Type.Name;
-            if( !typeName.EndsWith( suffix, StringComparison.Ordinal ) || typeName.Length == suffix.Length )
-            {
-                monitor.Error( $"The feature name of '{t.CSharpName}' is its type name without the suffix '{suffix}': its type name must end with it." );
-                return null;
-            }
-            name = typeName.Substring( 0, typeName.Length - suffix.Length );
-        }
-        if( !TypeSetConfiguration.IsValidFeatureName( name ) )
-        {
-            monitor.Error( $"The feature name '{name}' of '{t.CSharpName}' is not valid (letters, digits and dots, starting with a letter)." );
-            return null;
-        }
-        return name;
     }
 }

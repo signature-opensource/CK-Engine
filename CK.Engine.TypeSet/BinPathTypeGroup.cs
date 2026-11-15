@@ -280,7 +280,7 @@ public sealed partial class BinPathTypeGroup
                     }
                 }
             }
-            var featureNames = CollectFeatureNames( monitor, types.AllTypes );
+            var featureNames = FeaturePackages.CollectFeatureNames( monitor, types.AllTypes );
             IReadOnlyDictionary<string, IReadOnlySet<ICachedType>>? typeSets = null;
             if( featureNames == null )
             {
