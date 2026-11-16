@@ -9,16 +9,18 @@ using static CK.Testing.MonitorTestHelper;
 
 namespace CK.Engine.TypeSet.Tests;
 
-[AttributeUsage( AttributeTargets.Class, Inherited = false )]
-public sealed class TestFeatureAttribute : Attribute, INamedFeatureAttribute
+[AttributeUsage( AttributeTargets.Class, AllowMultiple = true, Inherited = false )]
+public sealed class TestConfigurableAttribute : Attribute, IConfigurableTypeAttribute
 {
-    public TestFeatureAttribute( string? name = null ) => Name = name;
+    public TestConfigurableAttribute( string name, TypeActivation activation )
+    {
+        Name = name;
+        Activation = activation;
+    }
 
-    public string? Name { get; }
+    public string Name { get; }
 
-    public string? TypeNameSuffix { get; init; }
-
-    public bool IsMultiple { get; init; }
+    public TypeActivation Activation { get; }
 }
 
 [AttributeUsage( AttributeTargets.Class, Inherited = false )]
@@ -26,9 +28,6 @@ public sealed class TestOptionalAttribute : Attribute, IOptionalResourceGroupAtt
 {
     public bool IsOptional => true;
 }
-
-[TestFeature( TypeNameSuffix = "Driver" )]
-public abstract class TestDriver : IResourceGroup { }
 
 [AttributeUsage( AttributeTargets.Class, Inherited = false )]
 public sealed class TestOptionalityAttribute : Attribute, IOptionalResourceGroupAttribute
@@ -48,21 +47,23 @@ public class PackageClosureTests
 
     public sealed class Req : IResourceGroup { }
 
-    [TestFeature( "One" ), Requires<Req>]
+    [TestConfigurable( "One", TypeActivation.ByDefault ), Requires<Req>]
     public sealed class Feature1 : IResourceGroup { }
 
-    public sealed class HttpDriver : TestDriver { }
+    [TestConfigurable( "Http", TypeActivation.Required )]
+    public sealed class HttpDriver : IResourceGroup { }
+
+    [TestConfigurable( "Opt", TypeActivation.Optional )]
+    public sealed class OptFeature : IResourceGroup { }
 
     [TestOptional]
     public sealed class OptPkg : IResourceGroup { }
 
-    [TestFeature( "Side", IsMultiple = true )]
     public sealed class Side1 : IResourceGroup { }
 
-    [TestFeature( "Side", IsMultiple = true )]
     public sealed class Side2 : IResourceGroup { }
 
-    static readonly Type[] _all = [typeof( Service ), typeof( Req ), typeof( Feature1 ), typeof( HttpDriver ), typeof( OptPkg ), typeof( Side1 ), typeof( Side2 )];
+    static readonly Type[] _all = [typeof( Service ), typeof( Req ), typeof( Feature1 ), typeof( HttpDriver ), typeof( OptFeature ), typeof( OptPkg ), typeof( Side1 ), typeof( Side2 )];
 
     static EngineConfiguration Create( params TypeSetConfiguration[] sets ) => Create( _all, sets );
 
@@ -99,25 +100,33 @@ public class PackageClosureTests
     }
 
     [Test]
-    public void the_roots_by_feature_name_and_their_closure()
+    public void the_roots_by_type_and_their_closure()
     {
         var party = new TypeSetConfiguration( "$Party" );
-        party.Features.Add( "one" );
+        party.Types.Add( typeof( Feature1 ) );
         // The other types are not packages: they stay.
         Run( Create( party ), "$Party" ).ShouldBe( ["Feature1", "Req", "Service"] );
 
-        party.Features.Add( "Http" );
-        party.Features.Add( "Side" );
+        party.Types.Add( typeof( HttpDriver ) );
+        party.Types.Add( typeof( Side1 ) );
+        party.Types.Add( typeof( Side2 ) );
         Run( Create( party ), "$Party" ).ShouldBe( ["Feature1", "HttpDriver", "Req", "Service", "Side1", "Side2"] );
     }
 
     [Test]
-    public void the_feature_names_are_exposed_by_the_group_even_without_sets()
+    public void the_configurable_types_are_exposed_by_the_group_even_without_sets()
     {
         var g = BinPathTypeGroup.Run( TestHelper.Monitor, Create() ).ShouldNotBeNull().Groups.ShouldHaveSingleItem();
-        g.FeatureNames.Keys.Order().ShouldBe( ["Http", "One", "Side"] );
-        g.FeatureNames["side"].Select( t => t.Type.Name ).Order().ShouldBe( ["Side1", "Side2"] );
-        g.FeatureNames["One"].ShouldHaveSingleItem().Type.ShouldBe( typeof( Feature1 ) );
+        g.ConfigurableTypes.Select( t => t.Type.Name ).ShouldBe( ["Feature1", "HttpDriver", "OptFeature"] );
+    }
+
+    [Test]
+    public void an_optional_configurable_type_is_a_member_only_when_rooted()
+    {
+        Run( Create( new TypeSetConfiguration( "$Party" ) ), "$Party" ).ShouldNotContain( "OptFeature" );
+        var party = new TypeSetConfiguration( "$Party" );
+        party.Types.Add( typeof( OptFeature ) );
+        Run( Create( party ), "$Party" ).ShouldBe( ["OptFeature", "Service"] );
     }
 
     public sealed class OptionalByBase : OptionalBase { }
@@ -152,7 +161,7 @@ public class PackageClosureTests
         Run( c, "App" ).ShouldBe( ["OptPkg", "Service"] );
 
         // A party with roots has them and the ones of its clients.
-        party.Features.Add( "One" );
+        party.Types.Add( typeof( Feature1 ) );
         Run( Create( party, client ), "$Party" ).ShouldBe( ["Feature1", "OptPkg", "Req", "Service"] );
     }
 
@@ -202,7 +211,8 @@ public class PackageClosureTests
     public void a_set_is_computed_inside_its_parent()
     {
         var party = new TypeSetConfiguration( "$Party" );
-        party.ExcludedFeatures.Add( "Side" );
+        party.ExcludedTypes.Add( typeof( Side1 ) );
+        party.ExcludedTypes.Add( typeof( Side2 ) );
         party.ExcludedTypes.Add( typeof( Service ) );
         var client = new TypeSetConfiguration( "App" ) { Parent = "$Party" };
         Run( Create( party, client ), "App" ).ShouldBe( ["Feature1", "HttpDriver", "Req"] );
@@ -212,45 +222,33 @@ public class PackageClosureTests
     public void a_required_package_must_be_a_candidate()
     {
         var party = new TypeSetConfiguration( "$Party" );
-        party.Features.Add( "One" );
+        party.Types.Add( typeof( Feature1 ) );
         party.ExcludedTypes.Add( typeof( Req ) );
         RunFails( Create( party ), "references 'CK.Engine.TypeSet.Tests.PackageClosureTests+Req' (Requires) that is not a candidate package" );
     }
 
     [Test]
-    public void a_root_must_be_a_candidate()
+    public void a_root_cannot_be_excluded_by_an_ancestor()
     {
+        // With the types driving, the configuration detects it (the engine's check of the roots is a safety net).
         var party = new TypeSetConfiguration( "$Party" );
-        party.ExcludedFeatures.Add( "One" );
+        party.ExcludedTypes.Add( typeof( Feature1 ) );
         var client = new TypeSetConfiguration( "App" ) { Parent = "$Party" };
         client.Types.Add( typeof( Feature1 ) );
-        RunFails( Create( party, client ), "is a root of TypeSet '$Party' (or of a set below it) but it is excluded from it or it is not in its parent." );
+        RunFails( Create( party, client ), "that its ancestor TypeSet '$Party' excludes" );
     }
 
-    [Test]
-    public void an_unknown_feature_name_is_an_error()
-    {
-        var party = new TypeSetConfiguration( "$Party" );
-        party.Features.Add( "Nope" );
-        RunFails( Create( party ), "TypeSet '$Party': no package has the feature name 'Nope'." );
-    }
+    [TestConfigurable( "NotAPackage", TypeActivation.Optional )] public sealed class NotAPackage { }
+    [TestConfigurable( "Bad-Name", TypeActivation.Optional )] public sealed class BadName : IResourceGroup { }
+    [TestConfigurable( "NoActivation", TypeActivation.None )] public sealed class NoActivation : IResourceGroup { }
+    [TestConfigurable( "One", TypeActivation.Optional ), TestConfigurable( "Two", TypeActivation.Optional )] public sealed class TwoNames : IResourceGroup { }
 
-    [TestFeature( "Same" )] public sealed class Same1 : IResourceGroup { }
-    [TestFeature( "same" )] public sealed class Same2 : IResourceGroup { }
-    [TestFeature( "Mixed", IsMultiple = true )] public sealed class Mixed1 : IResourceGroup { }
-    [TestFeature( "Mixed", IsMultiple = true ), TestOptional] public sealed class Mixed2 : IResourceGroup { }
-    [TestFeature( "NotAPackage" )] public sealed class NotAPackage { }
-    [TestFeature( TypeNameSuffix = "Driver" )] public sealed class BadSuffix : IResourceGroup { }
-    [TestFeature( "Bad-Name" )] public sealed class BadName : IResourceGroup { }
-
-    [TestCase( typeof( Same1 ), typeof( Same2 ), "a name can be borne by more than one package only when all of them are IsMultiple" )]
-    [TestCase( typeof( Mixed1 ), typeof( Mixed2 ), "must agree on their optionality" )]
-    [TestCase( typeof( NotAPackage ), null, "has a feature name but it is not a package" )]
-    [TestCase( typeof( BadSuffix ), null, "its type name must end with it" )]
-    [TestCase( typeof( BadName ), null, "The feature name 'Bad-Name'" )]
-    public void feature_name_errors( Type t1, Type? t2, string expected )
+    [TestCase( typeof( NotAPackage ), "it is not a package (a concrete IResourceGroup)" )]
+    [TestCase( typeof( BadName ), "The configuration name 'Bad-Name'" )]
+    [TestCase( typeof( NoActivation ), "must be Optional, ByDefault or Required (it is 'None')" )]
+    [TestCase( typeof( TwoNames ), "has 2 configurable type attributes" )]
+    public void an_invalid_configurable_type_is_an_error_of_the_group( Type t, string expected )
     {
-        Type[] types = t2 == null ? [t1] : [t1, t2];
-        RunFails( Create( types, new TypeSetConfiguration( "$Party" ) ), expected );
+        RunFails( Create( [t], new TypeSetConfiguration( "$Party" ) ), expected );
     }
 }

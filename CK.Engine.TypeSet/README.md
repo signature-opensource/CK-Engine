@@ -33,14 +33,15 @@ party, a client of a party), by their name (case insensitive). A set is computed
 or the group), parents first:
 
 - **Its packages** (the concrete `IResourceGroup`) are the closure of its roots among the packages of its parent minus
-  its `ExcludedTypes` and `ExcludedFeatures` (`ResPackageClosure` of
+  its `ExcludedTypes` (`ResPackageClosure` of
   [CK.ResourceSpace](https://github.com/signature-opensource/CK-ResourceSpace/blob/stable/CK.ResourceSpace/README.md):
   the required relations, forward only; a reference to a type that is not an `IResourceGroup` is ignored).
-- **Its roots** are the packages of its `Types` and of its `Features`, plus the roots of the sets below it (they
-  propagate upward: a package that a client roots is in its party). A set that has no own roots also has the non
-  optional packages of its candidates. A package is optional when the `IOptionalResourceGroupAttribute` of the
-  closest class (in its base classes) that declares one all say so: an abstract base can make its specializations
-  optional, a specialization can say it is not.
+- **Its roots** are the packages of its `Types`, plus the roots of the sets below it (they propagate upward: a package
+  that a client roots is in its party). A set that has no own roots also has the non optional packages of its
+  candidates (`ICachedType.IsOptional`: the `IOptionalResourceGroupAttribute` of the closest class, in its base classes,
+  that declares one all say so; an abstract base can make its specializations optional, a specialization can say it is
+  not; a configurable type is optional when its activation is `Optional`). This optionality lets an assembly offer more
+  than what an application eventually uses while keeping the unused code out.
 - **Its other types** are the ones of its parent minus its `ExcludedTypes`.
 - The `[AlsoRegisterType]` closure of its members applies last: it cannot bring back a type excluded by the set, one
   of its ancestors or the BinPath (an error).
@@ -52,21 +53,14 @@ only candidate (more than one candidate and no root is an ambiguity: an error). 
 the scopes in which an abstraction is unique (a client, a party) are known by the engine of the model that defines
 them, which checks them (`ResPackageClosure` receives this decision as a predicate). The sets are part of the group's signature.
 
-### Feature names
+### Configurable types
 
-The `Features` and `ExcludedFeatures` of a set are feature names: the names that the `INamedFeatureAttribute` of
-CK.ResourceSpace.Abstractions gives to packages. A name is resolved here only, while the sets are computed: it is never
-an alias of a type.
-
-- The name is the `Name` of the attribute, or the type name without its `TypeNameSuffix`. The attribute can decorate an
-  abstract base class: the closest one in the base classes of a package applies.
-- A name is borne by one package unless all the packages that bear it are `IsMultiple`; they then agree on their
-  optionality.
-- A feature name on a type that is not a package (except an abstract class), a name that no package bears, an invalid
-  name are errors.
-
-`BinPathTypeGroup.FeatureNames` exposes the names of a group and the packages that each one activates: what a
-configuration tool can offer to choose from.
+The types drive: a set is given by types. `BinPathTypeGroup.ConfigurableTypes` are the configurable types of the group
+(`ICachedType.TryGetConfigurableType`, see the `IConfigurableTypeAttribute` of CK.ResourceSpace.Abstractions): their
+configuration name is the key of their section, an alias of the type in the configuration only, that never brings the
+type in a set. An invalid declaration is an error of the group (logged once by the type cache). The uniqueness of a name
+is checked in its scope (a party, a client, the section of an owner...) by the engine of the model that defines the
+scopes. This list is what a configuration tool can offer to choose from.
 
 ## Exclusion
 

@@ -12,7 +12,7 @@ public sealed partial class BinPathTypeGroup
 {
     // The named sets of a group (see TypeSetConfiguration), computed parents first:
     // - the packages (the concrete IResourceGroup) are the closure of the roots among the packages of the parent minus
-    //   the excluded ones; the roots are the packages of the Types and the Features of the set, plus the ones of its
+    //   the excluded ones; the roots are the packages of the Types of the set, plus the ones of its
     //   descendants (the roots propagate upward); a set without own roots also has the non optional packages;
     // - the other types are the ones of the parent minus the excluded ones;
     // - the [AlsoRegisterType] closure of the members applies last (it ignores any exclusion).
@@ -21,7 +21,6 @@ public sealed partial class BinPathTypeGroup
                                                                                    GlobalTypeCache typeCache,
                                                                                    BinPathConfiguration c,
                                                                                    IReadOnlySet<ICachedType> groupTypes,
-                                                                                   Dictionary<string, List<ICachedType>> features,
                                                                                    IncrementalHash hasher )
     {
         if( c.TypeSets.Count == 0 ) return ImmutableDictionary<string, IReadOnlySet<ICachedType>>.Empty;
@@ -31,23 +30,16 @@ public sealed partial class BinPathTypeGroup
             hasher.Append( "TypeSet:" ).Append( s.Name ).Append( "/" ).Append( s.Parent ?? "" );
             foreach( var t in s.ExcludedTypes.Select( t => t.ToCSharpName() ).Order( StringComparer.Ordinal ) ) hasher.Append( "-" ).Append( t );
             foreach( var t in s.Types.Select( t => t.ToCSharpName() ).Order( StringComparer.Ordinal ) ) hasher.Append( "+" ).Append( t );
-            foreach( var f in s.ExcludedFeatures.Select( f => f.ToLowerInvariant() ).Order( StringComparer.Ordinal ) ) hasher.Append( "-F:" ).Append( f );
-            foreach( var f in s.Features.Select( f => f.ToLowerInvariant() ).Order( StringComparer.Ordinal ) ) hasher.Append( "+F:" ).Append( f );
         }
-        bool success = true;
         // The own roots and the excluded types of each set (an excluded type excludes everything that is it: see TypeExclusion).
         var ownRoots = new Dictionary<TypeSetConfiguration, HashSet<ICachedType>>();
         var excluded = new Dictionary<TypeSetConfiguration, List<Type>>();
         foreach( var s in c.TypeSets )
         {
-            var roots = new HashSet<ICachedType>( s.Types.Select( typeCache.Get ).Where( FeaturePackages.IsPackage ) );
-            var excludedPackages = new HashSet<ICachedType>();
-            success &= ResolveFeatures( monitor, s, s.Features, features, roots );
-            success &= ResolveFeatures( monitor, s, s.ExcludedFeatures, features, excludedPackages );
-            ownRoots.Add( s, roots );
-            excluded.Add( s, [.. s.ExcludedTypes, .. excludedPackages.Select( p => p.Type )] );
+            ownRoots.Add( s, new HashSet<ICachedType>( s.Types.Select( typeCache.Get ).Where( IsPackage ) ) );
+            excluded.Add( s, [.. s.ExcludedTypes] );
         }
-        if( !success ) return null;
+        bool success = true;
         // The roots propagate upward.
         var allRoots = ownRoots.ToDictionary( kv => kv.Key, kv => new HashSet<ICachedType>( kv.Value ) );
         foreach( var s in c.TypeSets )
@@ -71,7 +63,7 @@ public sealed partial class BinPathTypeGroup
             IReadOnlySet<ICachedType>? parentMembers = parent == null ? groupTypes : Compute( parent );
             if( parentMembers == null ) return null;
             var ex = excluded[s];
-            var candidates = parentMembers.Where( t => FeaturePackages.IsPackage( t ) && ex.FindExcluder( t.Type ) == null ).ToHashSet();
+            var candidates = parentMembers.Where( t => IsPackage( t ) && ex.FindExcluder( t.Type ) == null ).ToHashSet();
             var roots = allRoots[s];
             bool rootsOk = true;
             foreach( var r in roots.Where( r => !candidates.Contains( r ) ).OrderBy( r => r.CSharpName ) )
@@ -83,7 +75,7 @@ public sealed partial class BinPathTypeGroup
             if( ownRoots[s].Count == 0 )
             {
                 roots = new HashSet<ICachedType>( roots );
-                roots.UnionWith( candidates.Where( t => !FeaturePackages.IsOptional( t ) ) );
+                roots.UnionWith( candidates.Where( t => !t.IsOptional ) );
             }
             HashSet<ICachedType>? closure;
             using( monitor.OpenTrace( $"Computing the packages of {s} from {roots.Count} roots among {candidates.Count} candidates." ) )
@@ -102,7 +94,7 @@ public sealed partial class BinPathTypeGroup
                 monitor.Error( $"Unable to compute the packages of {s}." );
                 return null;
             }
-            var members = new HashSet<ICachedType>( parentMembers.Where( t => !FeaturePackages.IsPackage( t ) && ex.FindExcluder( t.Type ) == null ) );
+            var members = new HashSet<ICachedType>( parentMembers.Where( t => !IsPackage( t ) && ex.FindExcluder( t.Type ) == null ) );
             members.UnionWith( closure );
             // The [AlsoRegisterType] cannot bring back a type excluded by this set, its ancestors or the BinPath.
             var alsoTypes = members.GetRegisterAlsoTypesClosure();
@@ -144,25 +136,9 @@ public sealed partial class BinPathTypeGroup
 
     static TypeSetConfiguration? FindParent( BinPathConfiguration c, TypeSetConfiguration s ) => s.Parent != null ? c.FindTypeSet( s.Parent ) : null;
 
-    static bool ResolveFeatures( IActivityMonitor monitor,
-                                 TypeSetConfiguration s,
-                                 IEnumerable<string> names,
-                                 Dictionary<string, List<ICachedType>> features,
-                                 HashSet<ICachedType> collector )
-    {
-        bool success = true;
-        foreach( var f in names )
-        {
-            if( features.TryGetValue( f, out var packages ) )
-            {
-                collector.UnionWith( packages );
-            }
-            else
-            {
-                monitor.Error( $"{s}: no package has the feature name '{f}'." );
-                success = false;
-            }
-        }
-        return success;
-    }
+    /// <summary>
+    /// Gets whether a type is a package: a concrete <see cref="IResourceGroup"/> (the members of a set that its
+    /// closure selects).
+    /// </summary>
+    static bool IsPackage( ICachedType t ) => t.Type.IsClass && !t.Type.IsAbstract && typeof( IResourceGroup ).IsAssignableFrom( t.Type );
 }

@@ -17,7 +17,7 @@ public sealed partial class BinPathTypeGroup
     readonly string _groupName;
     readonly IConfiguredTypeSet _configuredTypes;
     readonly IReadOnlyDictionary<string, IReadOnlySet<ICachedType>> _typeSets;
-    readonly IReadOnlyDictionary<string, IReadOnlyList<ICachedType>> _featureNames;
+    readonly IReadOnlyList<ICachedType> _configurableTypes;
     // Regular groups have a BinPathGroup.
     readonly AssemblyCache.BinPathGroup? _assemblyGroup;
     readonly GlobalTypeCache _typeCache;
@@ -33,11 +33,11 @@ public sealed partial class BinPathTypeGroup
                       GlobalTypeCache typeCache,
                       IConfiguredTypeSet configuredTypes,
                       IReadOnlyDictionary<string, IReadOnlySet<ICachedType>> typeSets,
-                      IReadOnlyDictionary<string, IReadOnlyList<ICachedType>> featureNames,
+                      IReadOnlyList<ICachedType> configurableTypes,
                       SHA1Value signature )
     {
         _typeSets = typeSets;
-        _featureNames = featureNames;
+        _configurableTypes = configurableTypes;
         _configurations = configurations;
         _groupName = groupName;
         _assemblyGroup = assemblyGroup;
@@ -57,7 +57,7 @@ public sealed partial class BinPathTypeGroup
         _typeCache = typeCache;
         _configuredTypes = new ImmutableConfiguredTypeSet( allTypes );
         _typeSets = ImmutableDictionary<string, IReadOnlySet<ICachedType>>.Empty;
-        _featureNames = ImmutableDictionary<string, IReadOnlyList<ICachedType>>.Empty;
+        _configurableTypes = ImmutableArray<ICachedType>.Empty;
     }
 
     /// <summary>
@@ -97,14 +97,16 @@ public sealed partial class BinPathTypeGroup
     public IReadOnlyDictionary<string, IReadOnlySet<ICachedType>> TypeSets => _typeSets;
 
     /// <summary>
-    /// Gets the feature names of the packages of the group (see <c>INamedFeatureAttribute</c>), case insensitive: the
-    /// packages that each name activates (more than one for a multiple name). Empty for the unified group.
+    /// Gets the configurable types of the group (see <see cref="ICachedType.TryGetConfigurableType"/>), ordered by their
+    /// C# name. Empty for the unified group.
     /// <para>
-    /// A name only activates its packages (in the roots and the exclusions of a type set): it is never an alias of a type.
-    /// This dictionary is what a configuration tool can offer to choose from.
+    /// The configuration name of a configurable type is the key of its section: it is an alias of the type in the
+    /// configuration only, it never brings the type in a set (the types drive). The uniqueness of a name is checked in
+    /// its scope (a party, a client, the section of an owner...) by the engine of the model that defines the scopes.
+    /// This is what a configuration tool can offer to choose from.
     /// </para>
     /// </summary>
-    public IReadOnlyDictionary<string, IReadOnlyList<ICachedType>> FeatureNames => _featureNames;
+    public IReadOnlyList<ICachedType> ConfigurableTypes => _configurableTypes;
 
     /// <summary>
     /// Gets whether this group is the purely unified one.
@@ -280,16 +282,14 @@ public sealed partial class BinPathTypeGroup
                     }
                 }
             }
-            var featureNames = FeaturePackages.CollectFeatureNames( monitor, types.AllTypes );
-            IReadOnlyDictionary<string, IReadOnlySet<ICachedType>>? typeSets = null;
-            if( featureNames == null )
+            // The configurable types of the group: their invalid declarations are logged once (by the type cache).
+            var configurableTypes = ImmutableArray.CreateBuilder<ICachedType>();
+            foreach( var t in types.AllTypes.OrderBy( t => t.CSharpName, StringComparer.Ordinal ) )
             {
-                success = false;
+                if( !t.TryGetConfigurableType( monitor, out var configurable ) ) success = false;
+                else if( configurable != null ) configurableTypes.Add( t );
             }
-            else
-            {
-                typeSets = ComputeTypeSets( monitor, typeCache, c, types.AllTypes, featureNames, hasher );
-            }
+            var typeSets = ComputeTypeSets( monitor, typeCache, c, types.AllTypes, hasher );
             if( typeSets == null )
             {
                 success = false;
@@ -301,8 +301,7 @@ public sealed partial class BinPathTypeGroup
                                           typeCache,
                                           types,
                                           typeSets,
-                                          featureNames?.ToImmutableDictionary( kv => kv.Key, kv => (IReadOnlyList<ICachedType>)kv.Value, StringComparer.OrdinalIgnoreCase )
-                                            ?? ImmutableDictionary<string, IReadOnlyList<ICachedType>>.Empty,
+                                          configurableTypes.ToImmutable(),
                                           new SHA1Value( hasher, resetHasher: true ) );
             groups.Add( g );
         }
