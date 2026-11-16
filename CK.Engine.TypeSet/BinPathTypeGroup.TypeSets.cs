@@ -13,7 +13,8 @@ public sealed partial class BinPathTypeGroup
     // The named sets of a group (see TypeSetConfiguration), computed parents first:
     // - the packages (the concrete IResourceGroup) are the closure of the roots among the packages of the parent minus
     //   the excluded ones; the roots are the packages of the Types of the set, plus the ones of its
-    //   descendants (the roots propagate upward); a set without own roots also has the non optional packages;
+    //   descendants (the roots propagate upward); a set without own roots (that nothing restricts) has all the
+    //   packages of its parent, the optional ones too (the playground);
     // - the other types are the ones of the parent minus the excluded ones;
     // - the [AlsoRegisterType] closure of the members applies last (it ignores any exclusion).
     // Returns null on error.
@@ -72,10 +73,11 @@ public sealed partial class BinPathTypeGroup
                 rootsOk = false;
             }
             if( !rootsOk ) return null;
+            // A set that nothing restricts (no own roots) keeps the whole playground: all its candidates are roots,
+            // the optional ones too. The optionality acts in a restricted set only.
             if( ownRoots[s].Count == 0 )
             {
-                roots = new HashSet<ICachedType>( roots );
-                roots.UnionWith( candidates.Where( t => !t.IsOptional ) );
+                roots = candidates;
             }
             HashSet<ICachedType>? closure;
             using( monitor.OpenTrace( $"Computing the packages of {s} from {roots.Count} roots among {candidates.Count} candidates." ) )

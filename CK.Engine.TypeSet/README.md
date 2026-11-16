@@ -37,11 +37,13 @@ or the group), parents first:
   [CK.ResourceSpace](https://github.com/signature-opensource/CK-ResourceSpace/blob/stable/CK.ResourceSpace/README.md):
   the required relations, forward only; a reference to a type that is not an `IResourceGroup` is ignored).
 - **Its roots** are the packages of its `Types`, plus the roots of the sets below it (they propagate upward: a package
-  that a client roots is in its party). A set that has no own roots also has the non optional packages of its
-  candidates (`ICachedType.IsOptional`: the `IOptionalResourceGroupAttribute` of the closest class, in its base classes,
-  that declares one all say so; an abstract base can make its specializations optional, a specialization can say it is
-  not; a configurable type is optional when its activation is `Optional`). This optionality lets an assembly offer more
-  than what an application eventually uses while keeping the unused code out.
+  that a client roots is in its party).
+- **A set that nothing restricts** (no own roots) keeps the whole playground: all the packages of its parent, the
+  optional ones too. The App's set (the group) is the playground: the union of the types of the assemblies reached from
+  the heads; the sets restrict it, the engines run on it. The optionality of a package (`ICachedType.IsOptional`, the
+  `IOptionalResourceGroupAttribute`) doesn't select the members of a set: the engines that process a set apply it (the
+  ResourceSpace keeps an optional package only when something requires it), so that an assembly can offer more than what
+  an application eventually uses while keeping the unused code out.
 - **Its other types** are the ones of its parent minus its `ExcludedTypes`.
 - The `[AlsoRegisterType]` closure of its members applies last: it cannot bring back a type excluded by the set, one
   of its ancestors or the BinPath (an error).

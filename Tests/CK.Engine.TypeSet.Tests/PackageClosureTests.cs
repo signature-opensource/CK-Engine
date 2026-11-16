@@ -29,17 +29,6 @@ public sealed class TestOptionalAttribute : Attribute, IOptionalResourceGroupAtt
     public bool IsOptional => true;
 }
 
-[AttributeUsage( AttributeTargets.Class, Inherited = false )]
-public sealed class TestOptionalityAttribute : Attribute, IOptionalResourceGroupAttribute
-{
-    public TestOptionalityAttribute( bool isOptional ) => IsOptional = isOptional;
-
-    public bool IsOptional { get; }
-}
-
-[TestOptionality( true )]
-public abstract class OptionalBase : IResourceGroup { }
-
 [TestFixture]
 public class PackageClosureTests
 {
@@ -93,10 +82,11 @@ public class PackageClosureTests
     }
 
     [Test]
-    public void without_roots_a_set_has_the_non_optional_packages()
+    public void a_set_that_nothing_restricts_keeps_the_playground()
     {
+        // No own roots: all the packages of the parent (the group), the optional ones too.
         Run( Create( new TypeSetConfiguration( "$Party" ) ), "$Party" )
-            .ShouldBe( ["Feature1", "HttpDriver", "Req", "Service", "Side1", "Side2"] );
+            .ShouldBe( ["Feature1", "HttpDriver", "OptFeature", "OptPkg", "Req", "Service", "Side1", "Side2"] );
     }
 
     [Test]
@@ -121,24 +111,12 @@ public class PackageClosureTests
     }
 
     [Test]
-    public void an_optional_configurable_type_is_a_member_only_when_rooted()
+    public void in_a_restricted_set_a_package_is_a_member_only_when_rooted_or_required()
     {
-        Run( Create( new TypeSetConfiguration( "$Party" ) ), "$Party" ).ShouldNotContain( "OptFeature" );
+        Run( Create( new TypeSetConfiguration( "$Party" ) ), "$Party" ).ShouldContain( "OptFeature" );
         var party = new TypeSetConfiguration( "$Party" );
         party.Types.Add( typeof( OptFeature ) );
         Run( Create( party ), "$Party" ).ShouldBe( ["OptFeature", "Service"] );
-    }
-
-    public sealed class OptionalByBase : OptionalBase { }
-
-    [TestOptionality( false )]
-    public sealed class NotOptional : OptionalBase { }
-
-    [Test]
-    public void the_optionality_is_the_closest_declaration_in_the_base_classes()
-    {
-        Type[] types = [typeof( OptionalByBase ), typeof( NotOptional )];
-        Run( Create( types, new TypeSetConfiguration( "$Party" ) ), "$Party" ).ShouldBe( ["NotOptional"] );
     }
 
     [Test]
@@ -156,8 +134,8 @@ public class PackageClosureTests
         var client = new TypeSetConfiguration( "App" ) { Parent = "$Party" };
         client.Types.Add( typeof( OptPkg ) );
         var c = Create( party, client );
-        // The party has no own roots: its non optional packages, plus the optional one that its client roots.
-        Run( c, "$Party" ).ShouldBe( ["Feature1", "HttpDriver", "OptPkg", "Req", "Service", "Side1", "Side2"] );
+        // The party has no own roots: nothing restricts it, it has all the packages.
+        Run( c, "$Party" ).ShouldBe( ["Feature1", "HttpDriver", "OptFeature", "OptPkg", "Req", "Service", "Side1", "Side2"] );
         Run( c, "App" ).ShouldBe( ["OptPkg", "Service"] );
 
         // A party with roots has them and the ones of its clients.
@@ -215,7 +193,7 @@ public class PackageClosureTests
         party.ExcludedTypes.Add( typeof( Side2 ) );
         party.ExcludedTypes.Add( typeof( Service ) );
         var client = new TypeSetConfiguration( "App" ) { Parent = "$Party" };
-        Run( Create( party, client ), "App" ).ShouldBe( ["Feature1", "HttpDriver", "Req"] );
+        Run( Create( party, client ), "App" ).ShouldBe( ["Feature1", "HttpDriver", "OptFeature", "OptPkg", "Req"] );
     }
 
     [Test]
