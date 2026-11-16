@@ -1,6 +1,6 @@
 <Solution>
   <Folder Name="/Tests/">
-    <Project Path="Tests/CK.Engine.TypeSet.Tests/CK.Engine.TypeSet.Tests.csproj" />
+    <Project Path="Tests/CK.TypeSet.Tests/CK.TypeSet.Tests.csproj" />
   </Folder>
-  <Project Path="CK.Engine.TypeSet/CK.Engine.TypeSet.csproj" />
+  <Project Path="CK.TypeSet/CK.TypeSet.csproj" />
 </Solution>

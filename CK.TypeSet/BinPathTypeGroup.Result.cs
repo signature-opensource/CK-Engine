@@ -1,7 +1,8 @@
 using CK.Core;
+using CK.TypeCache;
 using System.Collections.Generic;
 
-namespace CK.Engine.TypeCollector;
+namespace CK.TypeSet;
 
 public sealed partial class BinPathTypeGroup
 {

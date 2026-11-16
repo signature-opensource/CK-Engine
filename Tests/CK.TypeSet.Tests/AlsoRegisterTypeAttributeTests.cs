@@ -1,12 +1,12 @@
 using CK.Core;
-using CK.Engine.TypeCollector;
+using CK.TypeCache;
 using CK.Setup;
 using NUnit.Framework;
 using Shouldly;
 using System.Linq;
 using static CK.Testing.MonitorTestHelper;
 
-namespace CK.Engine.TypeSet.Tests;
+namespace CK.TypeSet.Tests;
 
 [TestFixture]
 public class AlsoRegisterTypeAttributeTests

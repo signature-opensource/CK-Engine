@@ -1,5 +1,5 @@
 using CK.Core;
-using CK.Engine.TypeCollector;
+using CK.TypeCache;
 using CK.Setup;
 using NUnit.Framework;
 using Shouldly;
@@ -7,7 +7,7 @@ using System;
 using System.Linq;
 using static CK.Testing.MonitorTestHelper;
 
-namespace CK.Engine.TypeSet.Tests;
+namespace CK.TypeSet.Tests;
 
 [AttributeUsage( AttributeTargets.Class, AllowMultiple = true, Inherited = false )]
 public sealed class TestConfigurableAttribute : Attribute, IConfigurableTypeAttribute
@@ -202,7 +202,7 @@ public class PackageClosureTests
         var party = new TypeSetConfiguration( "$Party" );
         party.Types.Add( typeof( Feature1 ) );
         party.ExcludedTypes.Add( typeof( Req ) );
-        RunFails( Create( party ), "references 'CK.Engine.TypeSet.Tests.PackageClosureTests+Req' (Requires) that is not a candidate package" );
+        RunFails( Create( party ), "references 'CK.TypeSet.Tests.PackageClosureTests+Req' (Requires) that is not a candidate package" );
     }
 
     [Test]
