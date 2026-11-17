@@ -40,6 +40,13 @@ public sealed partial class BinPathTypeGroup
         public GlobalTypeCache TypeCache => _assemblyResult.TypeCache;
 
         /// <summary>
+        /// Gets the result of the analysis of the assemblies: it can be given to a later <see cref="Run"/> of the same
+        /// configuration (the App builder computes the sets of its Apps before its contributors complete the
+        /// configuration, the engine run reuses its assemblies and its <see cref="TypeCache"/>).
+        /// </summary>
+        public AssemblyCache.Result AssemblyResult => _assemblyResult;
+
+        /// <summary>
         /// Gets the digital signature on this result based on the <see cref="BinPathTypeGroup.Signature"/>.
         /// <para>
         /// <see cref="SHA1Value.Zero"/> if <see cref="Success"/> is false.

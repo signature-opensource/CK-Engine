@@ -157,8 +157,13 @@ public sealed partial class BinPathTypeGroup
     /// </summary>
     /// <param name="monitor">The monitor to use.</param>
     /// <param name="configuration">The normalized configuration to handle.</param>
+    /// <param name="assemblies">
+    /// The result of a previous analysis of the assemblies of this configuration (<see cref="Result.AssemblyResult"/>):
+    /// reused when the configuration still has the same BinPaths with the same paths, otherwise the assemblies are
+    /// analyzed again.
+    /// </param>
     /// <returns>The result (<see cref="Result.Success"/> can be false) or null on configuration error.</returns>
-    public static Result? Run( IActivityMonitor monitor, EngineConfiguration configuration )
+    public static Result? Run( IActivityMonitor monitor, EngineConfiguration configuration, AssemblyCache.Result? assemblies = null )
     {
         Throw.CheckNotNullArgument( monitor );
         Throw.CheckNotNullArgument( configuration );
@@ -167,7 +172,17 @@ public sealed partial class BinPathTypeGroup
         {
             return null;
         }
-        var assemblyResult = AssemblyCache.Run( monitor, configuration );
+        AssemblyCache.Result assemblyResult;
+        if( assemblies != null && CanReuse( assemblies, configuration ) )
+        {
+            monitor.Info( "Reusing the previous analysis of the assemblies." );
+            assemblyResult = assemblies;
+        }
+        else
+        {
+            if( assemblies != null ) monitor.Info( "The BinPaths changed since the previous analysis of the assemblies: analyzing them again." );
+            assemblyResult = AssemblyCache.Run( monitor, configuration );
+        }
 
         // Always produce the groups even if assemblyResult.Success is false.
         bool success = assemblyResult.Success;
@@ -375,4 +390,13 @@ public sealed partial class BinPathTypeGroup
     /// </summary>
     /// <returns>A readable string.</returns>
     public override string ToString() => $"BinTypePathGoup '{_groupName}'";
+
+    // The assembly groups reference the BinPathConfiguration instances: the configuration must have the same ones, with the
+    // same paths (the assemblies of a BinPath are the ones of its path).
+    static bool CanReuse( AssemblyCache.Result assemblies, EngineConfiguration configuration )
+    {
+        var known = assemblies.BinPathGroups.SelectMany( g => g.Configurations.Select( c => (Group: g, Configuration: c) ) ).ToList();
+        return known.Count == configuration.BinPaths.Count
+               && configuration.BinPaths.All( b => known.Any( k => ReferenceEquals( k.Configuration, b ) && k.Group.Path == b.Path ) );
+    }
 }
