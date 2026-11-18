@@ -4,8 +4,8 @@
     <Description>The types of the BinPaths: their groups, their named type sets.</Description>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="CK.TypeCache" Version="36.0.2-0.uc.0.ci.26" />
+    <PackageReference Include="CK.TypeCache" Version="36.0.2-0.uc.0.ci.27" />
     <!-- The closure of the packages of a type set (ResPackageClosure). -->
-    <PackageReference Include="CK.ResourceSpace" Version="36.0.2-0.uc.0.ci.26" />
+    <PackageReference Include="CK.ResourceSpace" Version="36.0.2-0.uc.0.ci.27" />
   </ItemGroup>
 </Project>
