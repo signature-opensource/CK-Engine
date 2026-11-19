@@ -259,6 +259,12 @@ public sealed partial class BinPathTypeGroup
                 }
                 hasher.Append( type.CSharpName ).Append( kind );
             }
+            // The values burnt in the generated code are part of the signature: a changed "$LOCK" regenerates it.
+            foreach( var (path, value) in c.CompiledValues.OrderBy( kv => kv.Key, StringComparer.OrdinalIgnoreCase ) )
+            {
+                hasher.Append( path ).Append( value == null ? "(null)" : $"={value}" );
+            }
+            foreach( var l in c.CompiledLocks.Order( StringComparer.OrdinalIgnoreCase ) ) hasher.Append( l );
             // The inclusion of the named sets propagates upward: their Types are types of the group.
             foreach( var s in c.TypeSets.OrderBy( s => s.Name, StringComparer.OrdinalIgnoreCase ) )
             {
