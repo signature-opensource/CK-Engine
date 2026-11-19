@@ -265,6 +265,7 @@ public sealed partial class BinPathTypeGroup
                 hasher.Append( path ).Append( value == null ? "(null)" : $"={value}" );
             }
             foreach( var l in c.CompiledLocks.Order( StringComparer.OrdinalIgnoreCase ) ) hasher.Append( l );
+            foreach( var l in c.LockedRunValues.Order( StringComparer.OrdinalIgnoreCase ) ) hasher.Append( "Run!" ).Append( l );
             // The inclusion of the named sets propagates upward: their Types are types of the group.
             foreach( var s in c.TypeSets.OrderBy( s => s.Name, StringComparer.OrdinalIgnoreCase ) )
             {

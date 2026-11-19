@@ -36,6 +36,7 @@ public sealed partial class BinPathTypeGroup
                    && _configuration.TypeSets.All( s => y._configuration.FindTypeSet( s.Name ) is { } o && s.SetEquals( o ) )
                    // The values burnt in the generated code are part of it.
                    && _configuration.CompiledLocks.SetEquals( y._configuration.CompiledLocks )
+                   && _configuration.LockedRunValues.SetEquals( y._configuration.LockedRunValues )
                    && _configuration.CompiledValues.Count == y._configuration.CompiledValues.Count
                    && _configuration.CompiledValues.All( kv => y._configuration.CompiledValues.TryGetValue( kv.Key, out var v ) && v == kv.Value );
         }
