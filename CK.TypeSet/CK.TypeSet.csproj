@@ -3,8 +3,8 @@
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="CK.TypeCache" Version="36.0.2-0.uc.4.ci.81" />
+    <PackageReference Include="CK.TypeCache" Version="36.0.2-0.uc.4.ci.82" />
     <!-- The closure of the packages of a type set (ResPackageClosure). -->
-    <PackageReference Include="CK.ResourceSpace" Version="36.0.2-0.uc.4.ci.81" />
+    <PackageReference Include="CK.ResourceSpace" Version="36.0.2-0.uc.4.ci.82" />
   </ItemGroup>
 </Project>
